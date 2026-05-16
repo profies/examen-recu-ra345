@@ -1,48 +1,97 @@
-name: Primer flujo de trabajo CI/CD (Build, Test and Push Docker Image) para Ampliación de Entornos de Desarrollo
+# =========================================================
+# Workflow CI/CD para GitHub Actions
+# Objetivo:
+# 1. Descargar el código del repositorio
+# 2. Compilar el proyecto Java con Maven
+# 3. Construir una imagen Docker
+# 4. Publicar la imagen en GitHub Container Registry (GHCR)
+# =========================================================
 
-# ===== Disparadores del workflow =====
+# ===== Nombre del workflow =====
+name: CI/CD Del código a la publicación de la imagen Docker en GitHub Container Registry
+
+# =========================================================
+# EVENTOS QUE DISPARAN EL WORKFLOW
+# =========================================================
 on:
   push:
     branches:
-      - '**' # Cualquier rama 
+      - '**'   # Se ejecuta en cualquier rama
 
-# ===== Permisos del token automático de GitHub para que pueda "subir"(push del paso 4.) la imagen docker generada en el paso 3 al área de registro de GitHub ghcr.io/profies/aaee_mapamundi_sb =====
+# =========================================================
+# PERMISOS DEL TOKEN AUTOMÁTICO DE GITHUB
+# =========================================================
 permissions:
   contents: read
   packages: write
 
-# ===== Tareas del workflow =====
+# =========================================================
+# DEFINICIÓN DE TAREAS (jobs)
+# =========================================================
 jobs:
+
   build-and-push:
+
+    # Máquina virtual que utilizará GitHub
     runs-on: ubuntu-latest
 
+    # =====================================================
+    # PASOS DEL JOB
+    # =====================================================
     steps:
-    
-      # 1. Descarga código
-      - name: Checkout code
-        uses: actions/checkout@v3
 
-      # 2. JDK/Maven para tests previos
-      - name: Configución pasar TEST
-        uses: actions/setup-java@v3
+      # ---------------------------------------------------
+      # 1. Descargar el código del repositorio
+      # ---------------------------------------------------
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------
+      # 2. Instalar Java
+      #
+      # distribution: temurin -> distribución OpenJDK
+      # java-version: 21      -> versión de Java
+      # cache: maven          -> acelera futuras compilaciones
+      # ---------------------------------------------------
+      - name: Configurar Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 23
+          java-version: 21
+          cache: maven
 
-      - name: Construir proyecto con Maven
+      # ---------------------------------------------------
+      # 3. Compilar proyecto Maven
+      # También ejecuta tests automáticamente
+      # ---------------------------------------------------
+      - name: Compilar proyecto Maven
         run: mvn clean package
 
-      # 3. Construir la imagen Docker usando el Dockerfile
-      - name: Build Docker image
-        run: docker build -t ghcr.io/${{ github.repository }}:latest .
-
-      # 4. Push a GHCR (GitHub Container Registry)
-      - name: Push Docker image
-        uses: docker/login-action@v2
+      # ---------------------------------------------------
+      # 4. Login en GitHub Container Registry
+      #
+      # github.actor -> usuario que ejecuta el workflow
+      # GITHUB_TOKEN -> token automático generado por GitHub
+      # ---------------------------------------------------
+      - name: Login en GHCR
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push image
-        run: docker push ghcr.io/${{ github.repository }}:latest
+      # ---------------------------------------------------
+      # 5. Construcción y publicación de la imagen Docker
+      #
+      # context: . -> usa el directorio actual
+      # push: true -> sube la imagen al registro
+      #
+      # La imagen quedará publicada como:
+      # ghcr.io/USUARIO/REPOSITORIO:latest
+      # ---------------------------------------------------
+      - name: Build y Push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository }}:latest
